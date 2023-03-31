@@ -136,7 +136,7 @@ private:
     uint64_t ohead;
     // nc = num_chunks, ns = num_subchunks per chunk, lc = length of chunk, ls = length of subchunk
     // n is length of bitvector
-    int nc, ns, lc, ls, n;
+    int nc, ns, lc, ls, n, ns_l, lc_l;
 };
 
 // Default constructor
@@ -149,6 +149,8 @@ Rank::Rank() {
     lc = 0;
     ls = 0;
     n = 0;
+    ns_l = 0;
+    lc_l = 0;
 }
 
 // Constructor given bitvector
@@ -157,7 +159,7 @@ Rank::Rank(Bitvector * b) {
     // Here calculate chunks, subchunks, and ohead
     n = bitvector.get_length();
     lc = pow(log2(n),2);
-    nc = ceil(n / lc);
+    nc = ceil(static_cast<float>(n) / lc);
     ns = 2*log2(n);
     ls = log2(n)/2;
     int chunk_popcount = 0;
@@ -165,7 +167,7 @@ Rank::Rank(Bitvector * b) {
     //std::cout << "got here";
     //std::cout << bitvector.get_bitvector().get_int(0,9) << std::endl;
     //std::cout << std::popcount(bitvector.get_bitvector().get_int(0,9));
-    for (int i = 0; i < nc; i++) {
+    for (int i = 0; i < nc-1; i++) {
         popcount_of_chunks.push_back(chunk_popcount);
         subchunk_popcount = 0;
         std::vector<int> subchunk_popcount_vector;
@@ -182,6 +184,22 @@ Rank::Rank(Bitvector * b) {
         popcount_of_subchunks.push_back(subchunk_popcount_vector);
         //std::cout << popcount_of_chunks[i] << std::endl;
     }
+    popcount_of_chunks.push_back(chunk_popcount);
+    subchunk_popcount = 0;
+    std::vector<int> subchunk_popcount_vector;
+    lc_l = n % lc;
+    ns_l = lc_l/ls;
+    for (int j = 0; j < ns_l; j++) {
+        subchunk_popcount_vector.push_back(subchunk_popcount);
+        // popcount of subchunk
+        //std::cout << std::popcount(bitvector.get_bitvector().get_int(0,1));
+        subchunk_popcount += std::popcount(bitvector.get_bitvector().get_int((nc-1)*lc+j*ls,ls));
+        //std::cout << subchunk_popcount_vector[j] << std::endl;
+        // input popcount of subchunk into correct part of subchunk vector
+    }
+    // add up popcounts of subchunks to get popcount of chunk and input that into correct part of chunk vector
+    chunk_popcount += subchunk_popcount;
+    popcount_of_subchunks.push_back(subchunk_popcount_vector);
 
     // calculate ohead
     // 32 is the number of bits taken up by an int in memory
@@ -204,9 +222,11 @@ uint64_t Rank::rank1(uint64_t i) {
     int q1 = floor(i/lc);
     int r = i % lc;
     int q2 = floor(r/ls);
-    int cum_rank = popcount_of_chunks[q1];
-    int rel_cum_rank = popcount_of_subchunks[q1][q2];
-    int rank_within_subchunk;
+    int cum_rank = 0;
+    cum_rank = popcount_of_chunks[q1];
+    int rel_cum_rank = 0;
+    rel_cum_rank = popcount_of_subchunks[q1][q2];
+    int rank_within_subchunk = 0;
     rank_within_subchunk = std::popcount(bitvector.get_bitvector().get_int(q1*lc+q2*ls,i-(q1*lc+q2*ls)));
 
     rank = cum_rank + rel_cum_rank + rank_within_subchunk;
@@ -217,6 +237,7 @@ uint64_t Rank::rank1(uint64_t i) {
 bool Rank::save(std::string fname) {
     std::ofstream outputFile(fname);
     outputFile << n << std::endl << nc << std::endl << lc << std::endl << ns << std::endl << ls << std::endl;
+    outputFile << ns_l << std::endl << lc_l << std::endl;
     outputFile << ohead << std::endl;
     outputFile << bitvector.get_b_string() << std::endl;
     // Now still need to save popcount of chunks, popcount of subchunks
@@ -239,7 +260,7 @@ bool Rank::load(std::string fname) {
         std::cout << "The file could not be opened.\n";
         return false;
     }
-    std::string n_str, nc_str, lc_str, ns_str, ls_str, ohead_str;
+    std::string n_str, nc_str, lc_str, ns_str, ls_str, ns_l_str, lc_l_str, ohead_str;
     getline(inputFile, n_str);
     n = std::stoi(n_str);
     getline(inputFile, nc_str);
@@ -250,6 +271,10 @@ bool Rank::load(std::string fname) {
     ns = std::stoi(ns_str);
     getline(inputFile, ls_str);
     ls = std::stoi(ls_str);
+    getline(inputFile, ns_l_str);
+    ns_l = std::stoi(ns_l_str);
+    getline(inputFile, lc_l_str);
+    lc_l = std::stoi(lc_l_str);
     getline(inputFile, ohead_str);
     ohead = std::stoi(ohead_str);
 
@@ -316,10 +341,10 @@ uint64_t Select::select1(uint64_t i) {
     assert(n > 0);
     // This checks the condition to see if there is no element of the bitvector
     // whose rank is the given argument
-    /*if (rank_obj.rank1(n-1) < i) {
+    if (rank_obj.rank1(n-1) < i) {
         std::cout << "No answer";
         return -1;
-    }*/
+    }
     int l, c, r;
     l = 0;
     r = n-1;
@@ -403,13 +428,9 @@ void Sparse::finalize() {
     finalized = true;
     rank_obj = Rank(&bitvector);
     select_obj = Select(&rank_obj);
-    for (int i = 0; i < values.size(); i++) {
-        std::cout << values[i] << std::endl;
-    }
 }
 
 bool Sparse::get_at_rank(uint64_t r, std::string&  elem) {
-    std::cout << values.size() << std::endl;
     if (values.size() >= r) {
         elem = values[r];
         //std::cout << elem << std::endl;
@@ -425,10 +446,10 @@ bool Sparse::get_at_index(uint64_t r, std::string& elem) {
     if (bitvector.get_length() > r+1) {
         if (bitvector.get_bitvector()[r] == 1) {
             elem = values[rank_obj.rank1(r)];
-            std::cout << elem << std::endl;
+            //std::cout << elem << std::endl;
             return true;
         } else {
-            std::cout << elem << std::endl;
+            //std::cout << elem << std::endl;
             return false;
         }
     }
@@ -469,14 +490,14 @@ uint64_t Sparse::num_elem() {
 bool Sparse::save(std::string fname) {
     std::ofstream outputFile(fname);
     outputFile << bitvector_str << std::endl;
-    for (int i = 0; i < sz; i++) {
+    for (int i = 0; i < values.size(); i++) {
         outputFile << values[i] << std::endl;
     }
     outputFile.close();
     return true;
 }
 bool Sparse::load(std::string fname) {
-    std::ifstream inputFile(fname);
+    std::ifstream inputFile;
     inputFile.open(fname);
     if (!inputFile) {
         std::cout << "The file could not be opened.\n";
@@ -494,6 +515,7 @@ bool Sparse::load(std::string fname) {
         getline(inputFile, value);
         values.push_back(value);
     }
+    sz = bitvector.get_length();
     return true;
 }
 
@@ -562,7 +584,6 @@ int main() {
     Bitvector b1000000_5 = Bitvector(b_str_1000000_5);
     Bitvector b1000000_10 = Bitvector(b_str_1000000_10);
 
-
     // Task 1
     // Jacobson's Rank
     // Timing
@@ -604,7 +625,285 @@ int main() {
 */
     // Task 3
 
-    Sparse sp = Sparse(10);
+    Sparse sp_1000_1 = Sparse(1000);
+    Sparse sp_1000_5 = Sparse(1000);
+    Sparse sp_1000_10 = Sparse(1000);
+    //Sparse sp_10000_1 = Sparse(10000);
+    //Sparse sp_10000_5 = Sparse(10000);
+    //Sparse sp_10000_10 = Sparse(10000);
+    //Sparse sp_100000_1 = Sparse(100000);
+    //Sparse sp_100000_5 = Sparse(100000);
+    //Sparse sp_100000_10 = Sparse(100000);
+    //Sparse sp_1000000_1 = Sparse(1000000);
+    //Sparse sp_1000000_5 = Sparse(1000000);
+    //Sparse sp_1000000_10 = Sparse(1000000);
+
+    for (int i = 0; i < 1000; i += 10) {
+        sp_1000_10.append("foo",i);
+        if (i % 20 == 0) {
+            sp_1000_5.append("foo",i);
+            if (i % 100 == 0) {
+                sp_1000_1.append("foo",i);
+            }
+        }
+    }
+    /*for (int i = 0; i < 10000; i += 10) {
+        //sp_10000_10.append("foo",i);
+        if (i % 20 == 0) {
+            sp_10000_5.append("foo",i);
+            if (i % 100 == 0) {
+                //sp_10000_1.append("foo",i);
+            }
+        }
+    }
+    for (int i = 0; i < 100000; i += 10) {
+        //sp_100000_10.append("foo",i);
+        if (i % 20 == 0) {
+            sp_100000_5.append("foo",i);
+            if (i % 100 == 0) {
+                //sp_100000_1.append("foo",i);
+            }
+        }
+    }
+
+    for (int i = 0; i < 1000000; i += 10) {
+        //sp_1000000_10.append("foo",i);
+        if (i % 20 == 0) {
+            sp_1000000_5.append("foo",i);
+            if (i % 100 == 0) {
+                //sp_1000000_1.append("foo",i);
+            }
+        }
+    }*/
+
+    sp_1000_1.finalize();
+    //sp_1000_5.finalize();
+    sp_1000_10.finalize();
+    //sp_10000_1.finalize();
+    //sp_10000_5.finalize();
+    //sp_10000_10.finalize();
+    //sp_100000_1.finalize();
+    //sp_100000_5.finalize();
+    //sp_100000_10.finalize();
+    //sp_1000000_1.finalize();
+    //sp_1000000_5.finalize();
+    //sp_1000000_10.finalize();
+
+    std::string e = "hi";
+
+    auto start = std::chrono::high_resolution_clock::now();
+/*
+    sp_1000_1.get_at_rank(1, e);
+    sp_1000_1.get_at_rank(2, e);
+    sp_1000_1.get_at_rank(3, e);
+    sp_1000_1.get_at_rank(4, e);
+    sp_1000_1.get_at_rank(5, e);
+*/
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "1000, 1" << std::endl;
+    std::cout << duration.count() << std::endl;
+
+    std::cout << "1000, 1" << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_1000_1.get_at_rank(1, e);
+    sp_1000_1.get_at_rank(2, e);
+    sp_1000_1.get_at_rank(3, e);
+    sp_1000_1.get_at_rank(4, e);
+    sp_1000_1.get_at_rank(5, e);
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_1000_1.get_at_index(10, e);
+    sp_1000_1.get_at_index(20, e);
+    sp_1000_1.get_at_index(30, e);
+    sp_1000_1.get_at_index(40, e);
+    sp_1000_1.get_at_index(50, e);
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_1000_1.get_index_of(1);
+    sp_1000_1.get_index_of(2);
+    sp_1000_1.get_index_of(3);
+    sp_1000_1.get_index_of(4);
+    sp_1000_1.get_index_of(5);
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_1000_1.num_elem_at(10);
+    sp_1000_1.num_elem_at(20);
+    sp_1000_1.num_elem_at(30);
+    sp_1000_1.num_elem_at(40);
+    sp_1000_1.num_elem_at(50);
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+
+/*    start = std::chrono::high_resolution_clock::now();
+
+    sp_1000_10.get_at_rank(1, e);
+    sp_1000_10.get_at_rank(2, e);
+    sp_1000_10.get_at_rank(3, e);
+    sp_1000_10.get_at_rank(4, e);
+    sp_1000_10.get_at_rank(5, e);
+
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "1000, 10" << std::endl;
+    std::cout << duration.count() << std::endl;*/
+
+/*    start = std::chrono::high_resolution_clock::now();
+
+    sp_10000_1.get_at_rank(1, e);
+    sp_10000_1.get_at_rank(2, e);
+    sp_10000_1.get_at_rank(3, e);
+    sp_10000_1.get_at_rank(4, e);
+    sp_10000_1.get_at_rank(5, e);
+
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "10000, 1" << std::endl;
+    std::cout << duration.count() << std::endl;*/
+
+/*    std::cout << "10000, 5" << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_10000_5.size();
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_10000_5.num_elem();
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_10000_5.save("test.txt");
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_10000_5.load("test.txt");
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;*/
+
+/*
+    start = std::chrono::high_resolution_clock::now();
+
+    sp_10000_10.get_at_rank(1, e);
+    sp_10000_10.get_at_rank(2, e);
+    sp_10000_10.get_at_rank(3, e);
+    sp_10000_10.get_at_rank(4, e);
+    sp_10000_10.get_at_rank(5, e);
+
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "10000, 10" << std::endl;
+    std::cout << duration.count() << std::endl;
+
+    start = std::chrono::high_resolution_clock::now();
+
+    sp_100000_1.get_at_rank(1, e);
+    sp_100000_1.get_at_rank(2, e);
+    sp_100000_1.get_at_rank(3, e);
+    sp_100000_1.get_at_rank(4, e);
+    sp_100000_1.get_at_rank(5, e);
+
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "100000, 1" << std::endl;
+    std::cout << duration.count() << std::endl;
+*/
+
+/*    std::cout << "100000, 5" << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_100000_5.size();
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_100000_5.num_elem();
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_100000_5.save("test.txt");
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_100000_5.load("test.txt");
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;*/
+
+/*
+    start = std::chrono::high_resolution_clock::now();
+
+    sp_100000_10.get_at_rank(1, e);
+    sp_100000_10.get_at_rank(2, e);
+    sp_100000_10.get_at_rank(3, e);
+    sp_100000_10.get_at_rank(4, e);
+    sp_100000_10.get_at_rank(5, e);
+
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "100000, 10" << std::endl;
+    std::cout << duration.count() << std::endl;
+
+    start = std::chrono::high_resolution_clock::now();
+
+    sp_1000000_1.get_at_rank(1, e);
+    sp_1000000_1.get_at_rank(2, e);
+    sp_1000000_1.get_at_rank(3, e);
+    sp_1000000_1.get_at_rank(4, e);
+    sp_1000000_1.get_at_rank(5, e);
+
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "1000000, 1" << std::endl;
+    std::cout << duration.count() << std::endl;
+*/
+
+/*    std::cout << "1000000, 5" << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_1000000_5.size();
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_1000000_5.num_elem();
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_1000000_5.save("test.txt");
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;
+    start = std::chrono::high_resolution_clock::now();
+    sp_1000000_5.load("test.txt");
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << duration.count() << std::endl;*/
+
+/*    start = std::chrono::high_resolution_clock::now();
+
+    sp_1000000_10.get_at_rank(1, e);
+    sp_1000000_10.get_at_rank(2, e);
+    sp_1000000_10.get_at_rank(3, e);
+    sp_1000000_10.get_at_rank(4, e);
+    sp_1000000_10.get_at_rank(5, e);
+
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
+    std::cout << "1000000, 10" << std::endl;
+    std::cout << duration.count() << std::endl;*/
+
+    /*Sparse sp = Sparse(10);
     sp.append("foo", 1);
     sp.append("bar", 5);
     sp.append("baz", 9);
@@ -617,7 +916,10 @@ int main() {
     std::cout << e << std::endl;
     std::cout << sp.get_at_index(5, e) << std::endl;
     std::cout << e << std::endl;
-    std::cout << sp.get_index_of(2);
+    std::cout << sp.get_index_of(2);*/
+
+    std::cout << sizeof (std::string) << std::endl;
+    std::cout << "hi" << std::endl;
 
     return 0;
 }
