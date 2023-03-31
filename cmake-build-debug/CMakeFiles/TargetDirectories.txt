@@ -1,0 +1,3 @@
+/Users/bengoldschlager/CLionProjects/bitvector_hw2/cmake-build-debug/CMakeFiles/bitvector_hw2.dir
+/Users/bengoldschlager/CLionProjects/bitvector_hw2/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/bengoldschlager/CLionProjects/bitvector_hw2/cmake-build-debug/CMakeFiles/rebuild_cache.dir
