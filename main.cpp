@@ -136,6 +136,8 @@ private:
     uint64_t ohead;
     // nc = num_chunks, ns = num_subchunks per chunk, lc = length of chunk, ls = length of subchunk
     // n is length of bitvector
+    // ns_l is the number of subchunks in the last chunk
+    // lc_l is the length of the last chunk
     int nc, ns, lc, ls, n, ns_l, lc_l;
 };
 
@@ -164,9 +166,6 @@ Rank::Rank(Bitvector * b) {
     ls = log2(n)/2;
     int chunk_popcount = 0;
     int subchunk_popcount = 0;
-    //std::cout << "got here";
-    //std::cout << bitvector.get_bitvector().get_int(0,9) << std::endl;
-    //std::cout << std::popcount(bitvector.get_bitvector().get_int(0,9));
     for (int i = 0; i < nc-1; i++) {
         popcount_of_chunks.push_back(chunk_popcount);
         subchunk_popcount = 0;
@@ -174,15 +173,11 @@ Rank::Rank(Bitvector * b) {
         for (int j = 0; j < ns; j++) {
             subchunk_popcount_vector.push_back(subchunk_popcount);
             // popcount of subchunk
-            //std::cout << std::popcount(bitvector.get_bitvector().get_int(0,1));
             subchunk_popcount += std::popcount(bitvector.get_bitvector().get_int(i*lc+j*ls,ls));
-            //std::cout << subchunk_popcount_vector[j] << std::endl;
-            // input popcount of subchunk into correct part of subchunk vector
         }
         // add up popcounts of subchunks to get popcount of chunk and input that into correct part of chunk vector
         chunk_popcount += subchunk_popcount;
         popcount_of_subchunks.push_back(subchunk_popcount_vector);
-        //std::cout << popcount_of_chunks[i] << std::endl;
     }
     popcount_of_chunks.push_back(chunk_popcount);
     subchunk_popcount = 0;
@@ -191,11 +186,7 @@ Rank::Rank(Bitvector * b) {
     ns_l = lc_l/ls;
     for (int j = 0; j < ns_l; j++) {
         subchunk_popcount_vector.push_back(subchunk_popcount);
-        // popcount of subchunk
-        //std::cout << std::popcount(bitvector.get_bitvector().get_int(0,1));
         subchunk_popcount += std::popcount(bitvector.get_bitvector().get_int((nc-1)*lc+j*ls,ls));
-        //std::cout << subchunk_popcount_vector[j] << std::endl;
-        // input popcount of subchunk into correct part of subchunk vector
     }
     // add up popcounts of subchunks to get popcount of chunk and input that into correct part of chunk vector
     chunk_popcount += subchunk_popcount;
@@ -212,9 +203,7 @@ uint64_t Rank::overhead() {
 
 uint64_t Rank::rank1(uint64_t i) {
     // Here calculate rank
-    // Need to make sure i is within length of bitvector
     uint64_t rank;
-    // use popcount to get rank
 
     // this is the case where an element is queried which is beyond the length of the bitvector
     assert(i < n);
@@ -433,7 +422,6 @@ void Sparse::finalize() {
 bool Sparse::get_at_rank(uint64_t r, std::string&  elem) {
     if (values.size() >= r) {
         elem = values[r];
-        //std::cout << elem << std::endl;
         return true;
     }
     else {
@@ -442,14 +430,11 @@ bool Sparse::get_at_rank(uint64_t r, std::string&  elem) {
 }
 
 bool Sparse::get_at_index(uint64_t r, std::string& elem) {
-    //elem = " ";
     if (bitvector.get_length() > r+1) {
         if (bitvector.get_bitvector()[r] == 1) {
             elem = values[rank_obj.rank1(r)];
-            //std::cout << elem << std::endl;
             return true;
         } else {
-            //std::cout << elem << std::endl;
             return false;
         }
     }
@@ -589,7 +574,7 @@ int main() {
     // Timing
     // N = 1000, 10000, 100000
 
-/*    Rank r = Rank(&b1000000_5);
+    Rank r = Rank(&b1000000_5);
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -602,15 +587,15 @@ int main() {
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = duration_cast<std::chrono::microseconds>(stop - start);
     std::cout << duration.count() << std::endl;
-    std::cout << r.overhead();*/
+    std::cout << r.overhead();
 
     // Task 2
     // lg(n)-time select operation that uses binary search over ranks
-/*
+
     Rank r = Rank(&b1000000_5);
     Select s = Select(&r);
 
-    auto start = std::chrono::high_resolution_clock::now();
+    start = std::chrono::high_resolution_clock::now();
 
     s.select1(5);
     s.select1(10);
@@ -618,11 +603,11 @@ int main() {
     s.select1(20);
     s.select1(25);
 
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = duration_cast<std::chrono::microseconds>(stop - start);
+    stop = std::chrono::high_resolution_clock::now();
+    duration = duration_cast<std::chrono::microseconds>(stop - start);
     std::cout << duration.count() << std::endl;
     std::cout << s.overhead();
-*/
+
     // Task 3
 
     Sparse sp_1000_1 = Sparse(1000);
@@ -677,7 +662,7 @@ int main() {
     }*/
 
     sp_1000_1.finalize();
-    //sp_1000_5.finalize();
+    sp_1000_5.finalize();
     sp_1000_10.finalize();
     //sp_10000_1.finalize();
     //sp_10000_5.finalize();
@@ -690,19 +675,6 @@ int main() {
     //sp_1000000_10.finalize();
 
     std::string e = "hi";
-
-    auto start = std::chrono::high_resolution_clock::now();
-/*
-    sp_1000_1.get_at_rank(1, e);
-    sp_1000_1.get_at_rank(2, e);
-    sp_1000_1.get_at_rank(3, e);
-    sp_1000_1.get_at_rank(4, e);
-    sp_1000_1.get_at_rank(5, e);
-*/
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = duration_cast<std::chrono::microseconds>(stop - start);
-    std::cout << "1000, 1" << std::endl;
-    std::cout << duration.count() << std::endl;
 
     std::cout << "1000, 1" << std::endl;
     start = std::chrono::high_resolution_clock::now();
