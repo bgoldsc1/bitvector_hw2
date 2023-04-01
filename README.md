@@ -1,5 +1,7 @@
 # bitvector_hw2
 
+The github link for this project is: https://github.com/bgoldsc1/bitvector_hw2
+
 The project is written in C++ and each task is completed in the file main.cpp. This has the following classes: Bitvector, Rank, Select, and Sparse. Note that, in order to create a Bitvector, one must pass a string representation of the Bitvector to the constructor for the Bitvector class. For example, to create the Bitvector 01010110 and store it in the variable b, one would write
 
 Bitvector b = Bitvector("01010110");
