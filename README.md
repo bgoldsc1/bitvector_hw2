@@ -8,6 +8,8 @@ Bitvector b = Bitvector("01010110");
 
 Note that, in actuality, the Bitvector class at time of construction appends a certain number of 0's at the end of the given string so that the length of a Bitvector object is always an even power of 2, i.e. can be written in the form 2^(2N) where N is a positive integer. This increases the size of the bitvector by at most a constant factor (by at most 4 times, in fact). 
 
+Note that I use the compact vector third party library in my implementation of the Bitvectors. I had to use the version in Professor Patro's pufferfish github with certain sections commented out. The versions in my github repository are the versions that work with my implementation for this project. 
+
 Task 1
 
 The Rank class fulfills the requirements of the first task. An object in this class can be created from a Bitvector object by passing a pointer to a Bitvector object into the constructor for the Rank class. For example, one would write
